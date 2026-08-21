@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <!-- Legacy dashboard page migrated from on-prem IIS. Do not minify by hand. -->
+    <title>Operations Dashboard</title>
+    <!-- Windows-style asset path kept from the original on-prem build -->
+    <link rel="stylesheet" href="assets\css\dashboard.css">
+    <link rel="stylesheet" href="https://static.acme-corp.com/css/grid.css">
+</head>
+<body>
+    <!-- Header banner served from the on-prem file share -->
+    <header>
+        <img src="/var/www/html/assets/img/banner.png" alt="Banner">
+    </header>
+
+    <main>
+        <!-- Hardcoded production environment link -->
+        <a href="https://app-prod.acme-corp.com/portal/admin">Open Admin Console</a>
+
+        <!-- Windows backslash path for an icon -->
+        <img src="images/icons/refresh.png" alt="refresh">
+
+        <!-- Server-stamped build time embedded directly in static markup -->
+        <span class="build-info">Report generated: 2026-06-17 14:32:05 UTC</span>
+
+        <!-- Resource pulled from a developer machine -->
+        <script src="http://localhost:5000/js/telemetry.js"></script>
+
+        <!-- Library served from a non-standard port -->
+        <script src="http://cdn.acme-corp.com/js/charts.js"></script>
+    </main>
+
+    <script src="assets/js/dashboard.js"></script>
+    <noscript>JavaScript is required for live charts. Static report available at /reports/latest.</noscript>
+</body>
+</html>

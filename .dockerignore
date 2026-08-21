@@ -1,0 +1,71 @@
+# =============================================================================
+# .dockerignore — acme-portal-static (HTMLMono2)
+# Excludes development, test, build artifacts, and wrapper files from the
+# Docker build context to minimise image size and prevent accidental exposure.
+# =============================================================================
+
+# ── Maven build output ────────────────────────────────────────────────────────
+target/
+
+# ── Maven wrapper (NEVER used in Docker builds) ───────────────────────────────
+mvnw
+mvnw.cmd
+.mvn/
+
+# ── Gradle wrapper (if ever added) ───────────────────────────────────────────
+gradlew
+gradlew.bat
+gradle/wrapper/
+
+# ── Git metadata ──────────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+
+# ── IDE / editor artefacts ────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Development / test HTML files ─────────────────────────────────────────────
+test.html
+*.test.html
+*.dev.html
+index.dev.html
+debug.html
+debug-*.html
+*-debug.html
+*.debug.html
+
+# ── Source maps ───────────────────────────────────────────────────────────────
+*.map
+**/*.map
+assets/js/*.map
+assets/css/*.map
+
+# ── Build-info / build metadata HTML ─────────────────────────────────────────
+build-info.html
+build-*.html
+*-build-info.html
+
+# ── Build logs and CI artefacts ───────────────────────────────────────────────
+*.log
+build.log
+build-output.log
+npm-debug.log
+yarn-error.log
+imagedefinitions.json
+buildspec.yml
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+README.md
+CHANGELOG.md
+docs/
+
+# ── Generated deployment artefacts ───────────────────────────────────────────
+ecs/
+scripts/

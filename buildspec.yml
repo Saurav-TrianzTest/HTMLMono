@@ -1,0 +1,178 @@
+# =============================================================================
+# buildspec.yml — AWS CodeBuild Build Specification
+# Rule cz-html-1009 — Unminified HTML in Production Containers
+# Rule cz-html-1012 — Build Artifacts Included in HTML Container
+#
+# Remediation: HTML Minification Step in CI Pipeline for ECS Fargate
+#
+# This buildspec adds a dedicated HTML minification phase so that every ECS
+# Fargate deployment originates from a verified minified image, enforced by
+# CodePipeline gates. html-minifier-terser removes all unnecessary whitespace,
+#
+# cz-html-1012 Remediation: ECS Fargate Deployment Pipeline with Image Size
+# Validation via CodePipeline. A post-build validation stage checks the built
+# Docker image size and blocks deployment to ECS Fargate if the image contains
+# build artifacts (source maps, build logs) that bloat the image beyond the
+# defined threshold.
+# HTML comments, and formatting from every *.html file before the Docker image
+# is built, reducing container image size and improving Kubernetes pod startup
+# time and registry storage costs.
+#
+# Pipeline flow:
+#   CodePipeline → CodeBuild (this spec) → ECR push → ECS Fargate deploy
+# =============================================================================
+
+version: 0.2
+
+env:
+  variables:
+    HTML_ROOT: "."
+    ECR_REPO_URI: ""          # Set in CodePipeline / CodeBuild environment
+    IMAGE_TAG: "latest"       # Overridden by CodePipeline with $CODEBUILD_RESOLVED_SOURCE_VERSION
+    # cz-html-1012: Maximum allowed image size in MB before deployment is blocked.
+    # Tune this threshold to match your expected clean image size (no build artifacts).
+    # CodePipeline will fail this stage if the image exceeds this limit.
+    IMAGE_SIZE_LIMIT_MB: "150"
+
+phases:
+
+  # ---------------------------------------------------------------------------
+  # install: provision Node.js tooling for HTML minification
+  # ---------------------------------------------------------------------------
+  install:
+    runtime-versions:
+      nodejs: 20
+      java: corretto17
+    commands:
+      - echo "=== [cz-html-1009] Installing html-minifier-terser ==="
+      - npm install -g html-minifier-terser@7
+      - echo "html-minifier-terser version $(html-minifier-terser --version)"
+
+  # ---------------------------------------------------------------------------
+  # pre_build: authenticate to Amazon ECR
+  # ---------------------------------------------------------------------------
+  pre_build:
+    commands:
+      - echo "=== Logging in to Amazon ECR ==="
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION |
+          docker login --username AWS --password-stdin $ECR_REPO_URI
+
+  # ---------------------------------------------------------------------------
+  # build:
+  #   1. Minify all HTML files (cz-html-1009 remediation)
+  #   2. Compile the Java backend
+  #   3. Build and tag the Docker image
+  # ---------------------------------------------------------------------------
+  build:
+    commands:
+      # -----------------------------------------------------------------------
+      # Step 1 — HTML Minification (cz-html-1009)
+      #
+      # html-minifier-terser flags used:
+      #   --collapse-whitespace          remove inter-element whitespace
+      #   --remove-comments              strip HTML comments
+      #   --remove-optional-tags         omit optional closing tags
+      #   --remove-redundant-attributes  drop default attribute values
+      #   --remove-script-type-attributes remove type="text/javascript"
+      #   --remove-style-link-type-attributes remove type="text/css"
+      #   --use-short-doctype            replace verbose DOCTYPE with <!DOCTYPE html>
+      #   --minify-css true              minify inline <style> blocks
+      #   --minify-js true               minify inline <script> blocks
+      # -----------------------------------------------------------------------
+      - echo "=== [cz-html-1009] Minifying HTML files ==="
+      - |
+        find "${HTML_ROOT}" -type f -name "*.html" \
+          ! -path "*/.git/*" \
+          ! -path "*/node_modules/*" | while read -r html_file; do
+          echo "[minify] Processing: ${html_file}"
+          html-minifier-terser \
+            --collapse-whitespace \
+            --remove-comments \
+            --remove-optional-tags \
+            --remove-redundant-attributes \
+            --remove-script-type-attributes \
+            --remove-style-link-type-attributes \
+            --use-short-doctype \
+            --minify-css true \
+            --minify-js true \
+            --output "${html_file}" \
+            "${html_file}"
+          echo "[minify] Done: ${html_file} ($(wc -c < "${html_file}") bytes)"
+        done
+      - echo "=== [cz-html-1009] HTML minification complete ==="
+
+      # -----------------------------------------------------------------------
+      # Step 2 — Java backend compilation
+      # -----------------------------------------------------------------------
+      - echo "=== Building Java backend ==="
+      - mvn -q package -DskipTests
+
+      # -----------------------------------------------------------------------
+      # Step 3 — Docker image build and tag
+      # -----------------------------------------------------------------------
+      - echo "=== Building Docker image ==="
+      - IMAGE_URI="${ECR_REPO_URI}:${IMAGE_TAG}"
+      - docker build -t "${IMAGE_URI}" .
+      - echo "Docker image built and tagged as ${IMAGE_URI}"
+
+      # -----------------------------------------------------------------------
+      # Step 4 — Image Size Validation (cz-html-1012)
+      #
+      # Validates that the built Docker image does not exceed IMAGE_SIZE_LIMIT_MB.
+      # This gate blocks deployment of bloated images that may contain build
+      # artifacts such as source maps (.map files), build logs, or build-info
+      # HTML pages that were inadvertently included in the image.
+      #
+      # How it works:
+      #   1. Inspect the image size via `docker image inspect`
+      #   2. Convert bytes to MB
+      #   3. Fail the CodeBuild stage (exit 1) if size > IMAGE_SIZE_LIMIT_MB
+      #   4. CodePipeline treats a non-zero exit as a stage failure and blocks
+      #      the downstream ECS Fargate deploy action automatically.
+      #
+      # Companion .dockerignore rules (cz-html-1012):
+      #   *.map, **/*.map, build-info.html, build-*.html, *.log
+      #   These patterns prevent build artifacts from entering the Docker build
+      #   context in the first place; this size check is the enforcement gate.
+      # -----------------------------------------------------------------------
+      - echo "=== [cz-html-1012] Validating Docker image size ==="
+      - |
+        IMAGE_SIZE_BYTES=$(docker image inspect "${IMAGE_URI}" \
+          --format='{{.Size}}' 2>/dev/null || echo "0")
+        IMAGE_SIZE_MB=$(( IMAGE_SIZE_BYTES / 1024 / 1024 ))
+        echo "[cz-html-1012] Image size: ${IMAGE_SIZE_MB} MB (limit: ${IMAGE_SIZE_LIMIT_MB} MB)"
+        if [ "${IMAGE_SIZE_MB}" -gt "${IMAGE_SIZE_LIMIT_MB}" ]; then
+          echo "ERROR [cz-html-1012]: Docker image size ${IMAGE_SIZE_MB} MB exceeds" \
+               "the allowed limit of ${IMAGE_SIZE_LIMIT_MB} MB."
+          echo "This typically indicates build artifacts (source maps, build logs," \
+               "build-info HTML) were included in the image."
+          echo "Verify that .dockerignore excludes: *.map, build-info.html, *.log"
+          echo "Blocking ECS Fargate deployment via CodePipeline stage failure."
+          exit 1
+        fi
+        echo "[cz-html-1012] Image size validation PASSED: ${IMAGE_SIZE_MB} MB <= ${IMAGE_SIZE_LIMIT_MB} MB"
+      - echo "=== [cz-html-1012] Image size validation complete ==="
+
+  # ---------------------------------------------------------------------------
+  # post_build: push the verified minified image to ECR
+  # ---------------------------------------------------------------------------
+  post_build:
+    commands:
+      - echo "=== Pushing Docker image to ECR ==="
+      - docker push "${ECR_REPO_URI}:${IMAGE_TAG}"
+      - echo "=== Writing imagedefinitions.json for ECS Fargate CodePipeline gate ==="
+      - |
+        printf '[{"name":"acme-portal-static","imageUri":"%s:%s"}]' \
+          "${ECR_REPO_URI}" "${IMAGE_TAG}" > imagedefinitions.json
+      - cat imagedefinitions.json
+      - echo "=== Build complete ==="
+
+artifacts:
+  files:
+    - imagedefinitions.json
+  discard-paths: yes
+
+cache:
+  paths:
+    - "/root/.m2/**/*"
+    - "/root/.npm/**/*"

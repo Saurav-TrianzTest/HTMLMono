@@ -1,17 +1,1 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="env-config" content="">
-  <title>Contact Us</title>
-</head>
-<body>
-  <h1>Contact</h1>
-  <form action="https://api.acme-corp.com/v2/contact/submit" method="post">
-    <input name="email" type="email">
-    <button type="submit">Send</button>
-  </form>
-  <script>window.__ENV__ = window.__ENV__ || {};</script>
-  <noscript>Email us directly at support@acme.example.</noscript>
-</body>
-</html>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="env-config" content=""><title>Contact Us</title></head><body><h1>Contact</h1><form id="contact-form" action="" method="post"><input name="email" type="email"><button type="submit">Send</button></form><script>window.__ENV__=window.__ENV__||{};(function(){var apiBase=(window.__ENV__&&window.__ENV__.CONTACT_API_URL)||'';var form=document.getElementById('contact-form');if(form&&apiBase){form.setAttribute('action',apiBase);}})();</script><noscript>Email us directly at support@acme.example.</noscript></body></html>

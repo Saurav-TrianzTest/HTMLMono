@@ -1,0 +1,61 @@
+{
+  "family": "acme-portal-static-task",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "acme-portal-static",
+      "image": "{{IMAGE_URI}}",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "JAVA_OPTS",               "value": "-Xmx256m -Xms128m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.net.preferIPv4Stack=true" },
+        { "name": "TZ",                      "value": "UTC" },
+        { "name": "HTML_ROOT",               "value": "/usr/share/nginx/html" },
+        { "name": "NUXT_PUBLIC_APP_TITLE",   "value": "Acme App" },
+        { "name": "NUXT_APP_ENV",            "value": "production" },
+        { "name": "RUNTIME_APP_ENV",         "value": "production" },
+        { "name": "RUNTIME_FEATURE_FLAGS",   "value": "{}" }
+      ],
+      "secrets": [
+        {
+          "name": "NUXT_PUBLIC_API_BASE",
+          "valueFrom": "arn:aws:ssm:{{AWS_REGION}}:{{ACCOUNT_ID}}:parameter/acme/api-base"
+        },
+        {
+          "name": "TELEMETRY_BASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:{{AWS_REGION}}:{{ACCOUNT_ID}}:secret:acme/telemetry-base-url"
+        },
+        {
+          "name": "CDN_BASE_URL",
+          "valueFrom": "arn:aws:ssm:{{AWS_REGION}}:{{ACCOUNT_ID}}:parameter/acme/cdn-base-url"
+        },
+        {
+          "name": "RUNTIME_API_BASE_URL",
+          "valueFrom": "arn:aws:ssm:{{AWS_REGION}}:{{ACCOUNT_ID}}:parameter/acme/dashboard/api-base-url"
+        },
+        {
+          "name": "ADMIN_CONSOLE_URL",
+          "valueFrom": "arn:aws:ssm:{{AWS_REGION}}:{{ACCOUNT_ID}}:parameter/acme/admin-console-url"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/acme-portal-static",
+          "awslogs-region": "{{AWS_REGION}}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

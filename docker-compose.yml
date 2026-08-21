@@ -1,0 +1,59 @@
+version: "3.9"
+
+# =============================================================================
+# docker-compose.yml — acme-portal-static (HTMLMono2)
+# Application service only — no databases, caches, or other infrastructure.
+# External services are provided via environment variables.
+# =============================================================================
+
+services:
+  acme-portal-static:
+    image: acme-portal-static:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: acme-portal-static
+    ports:
+      - "8080:8080"
+    environment:
+      # JVM settings
+      JAVA_OPTS: "-Xmx256m -Xms128m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.net.preferIPv4Stack=true"
+      TZ: "UTC"
+      HTML_ROOT: "/usr/share/nginx/html"
+
+      # Nuxt 3 Nitro SSR runtime config (injected from SSM in ECS)
+      NUXT_PUBLIC_API_BASE: "${NUXT_PUBLIC_API_BASE:-}"
+      NUXT_PUBLIC_APP_TITLE: "${NUXT_PUBLIC_APP_TITLE:-Acme App}"
+      NUXT_APP_ENV: "${NUXT_APP_ENV:-development}"
+
+      # Telemetry service base URL (injected from Secrets Manager in ECS)
+      TELEMETRY_BASE_URL: "${TELEMETRY_BASE_URL:-}"
+
+      # CDN base URL (injected from SSM in ECS)
+      CDN_BASE_URL: "${CDN_BASE_URL:-}"
+
+      # window.__ENV__ runtime config (injected from SSM in ECS)
+      RUNTIME_API_BASE_URL: "${RUNTIME_API_BASE_URL:-http://localhost:8080}"
+      RUNTIME_APP_ENV: "${RUNTIME_APP_ENV:-development}"
+      RUNTIME_FEATURE_FLAGS: "${RUNTIME_FEATURE_FLAGS:-{}}"
+      ADMIN_CONSOLE_URL: "${ADMIN_CONSOLE_URL:-}"
+
+    volumes:
+      - ./logs:/var/log/nginx
+      - ./config:/usr/share/nginx/html/config
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
